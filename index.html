@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CX Chat Heatmap — Ultrahuman</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg: #080b0f; --surface: #0e1318; --card: #131920;
+  --border: rgba(255,255,255,0.06); --border2: rgba(255,255,255,0.12);
+  --text: #e8edf2; --muted: #6b7a8a;
+  --accent: #00e5a0; --accent2: #0ea5e9; --warn: #f59e0b; --danger: #f43f5e;
+  --mono: 'JetBrains Mono', monospace; --display: 'Syne', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); font-family: var(--display); font-size: 13px; line-height: 1.6; min-height: 100vh; overflow-x: hidden; }
+body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(0,229,160,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,160,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
+body::after { content: ''; position: fixed; top: -200px; left: 50%; transform: translateX(-50%); width: 800px; height: 400px; background: radial-gradient(ellipse, rgba(0,229,160,0.08) 0%, transparent 70%); pointer-events: none; z-index: 0; }
+.page { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 40px 24px 80px; }
+
+/* Header */
+.header { margin-bottom: 48px; }
+.header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 8px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.8); } }
+.brand-name { font-size: 11px; font-weight: 500; letter-spacing: .15em; text-transform: uppercase; color: var(--accent); font-family: var(--mono); }
+.date-badge { font-family: var(--mono); font-size: 10px; color: var(--muted); border: .5px solid var(--border2); border-radius: 4px; padding: 4px 10px; }
+h1 { font-size: clamp(28px,4vw,48px); font-weight: 800; letter-spacing: -.03em; line-height: 1.1; }
+h1 span { color: var(--accent); }
+.header-sub { font-size: 13px; color: var(--muted); margin-top: 8px; font-family: var(--mono); }
+
+/* Config */
+.config-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: var(--card); border: .5px solid var(--border2); border-radius: 12px; padding: 16px 20px; margin-bottom: 32px; }
+.config-bar label { font-size: 10px; color: var(--muted); font-family: var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.config-item { display: flex; align-items: center; gap: 10px; }
+.config-item input[type=range] { width: 100px; height: 3px; -webkit-appearance: none; background: rgba(255,255,255,.1); border-radius: 2px; outline: none; cursor: pointer; }
+.config-item input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); cursor: pointer; box-shadow: 0 0 8px rgba(0,229,160,.5); }
+.config-val { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--accent); min-width: 36px; }
+.config-sep { width: 1px; height: 24px; background: var(--border2); }
+.recalc-note { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: auto; }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; margin-bottom: 32px; }
+.kpi { background: var(--card); border: .5px solid var(--border); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; transition: border-color .2s, transform .2s; }
+.kpi:hover { border-color: var(--border2); transform: translateY(-2px); }
+.kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+.kpi.green::before { background: linear-gradient(90deg, var(--accent), transparent); }
+.kpi.blue::before  { background: linear-gradient(90deg, var(--accent2), transparent); }
+.kpi.warn::before  { background: linear-gradient(90deg, var(--warn), transparent); }
+.kpi.red::before   { background: linear-gradient(90deg, var(--danger), transparent); }
+.kpi-val { font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1; margin-bottom: 6px; }
+.kpi-val.green { color: var(--accent); }
+.kpi-val.blue  { color: var(--accent2); }
+.kpi-val.warn  { color: var(--warn); }
+.kpi-label { font-size: 10px; color: var(--muted); font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+
+/* Section */
+.section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; margin-top: 36px; }
+.section-title { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.section-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+/* Charts */
+.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px; }
+@media(max-width: 768px) { .charts-row { grid-template-columns: 1fr; } }
+.chart-card { background: var(--card); border: .5px solid var(--border); border-radius: 12px; padding: 20px; }
+.chart-card-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; font-family: var(--mono); }
+
+/* Heatmap */
+.heatmap-card { background: var(--card); border: .5px solid var(--border); border-radius: 12px; padding: 24px; overflow-x: auto; }
+.heatmap-table { border-collapse: collapse; font-family: var(--mono); font-size: 9px; min-width: 600px; width: 100%; }
+.heatmap-table th { padding: 6px 4px; color: var(--muted); font-weight: 500; font-size: 9px; text-align: center; letter-spacing: .04em; border-bottom: .5px solid var(--border2); }
+.heatmap-table th.slot-h { text-align: left; width: 44px; padding-left: 0; }
+.heatmap-table td { padding: 2px 3px; text-align: center; border-radius: 3px; cursor: default; position: relative; min-width: 32px; transition: outline .1s; }
+.heatmap-table td:hover { outline: 1.5px solid rgba(255,255,255,.5); z-index: 2; }
+.heatmap-table td.slot-td { color: var(--muted); text-align: left; padding-left: 0; font-size: 9px; background: transparent !important; border-radius: 0; }
+.heatmap-table td.avg-td { font-weight: 600; }
+.heatmap-table td.need-td { color: var(--warn); font-weight: 600; background: rgba(245,158,11,.08) !important; border-radius: 4px; }
+.period-row td { border-top: .5px solid rgba(255,255,255,.04); }
+.legend-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.legend-label { font-size: 9px; color: var(--muted); font-family: var(--mono); }
+.legend-grad { height: 6px; width: 180px; border-radius: 3px; background: linear-gradient(to right, #0f2a4a, #1d4ed8, #f0f9ff, #f97316, #7f1d1d); }
+.period-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.pbadge { font-family: var(--mono); font-size: 9px; padding: 2px 8px; border-radius: 3px; border: .5px solid; }
+
+/* Tooltip */
+#tooltip { display: none; position: fixed; background: #1a2330; border: .5px solid var(--border2); border-radius: 8px; padding: 10px 14px; font-family: var(--mono); font-size: 10px; z-index: 999; pointer-events: none; line-height: 1.8; min-width: 160px; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+
+/* Shifts */
+.shifts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 12px; margin-bottom: 32px; }
+.shift-card { background: var(--card); border: .5px solid var(--border); border-radius: 12px; padding: 18px; position: relative; overflow: hidden; transition: border-color .2s, transform .2s; }
+.shift-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+.shift-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; }
+.shift-s1::after { background: linear-gradient(90deg,#f59e0b,transparent); }
+.shift-s2::after { background: linear-gradient(90deg,#00e5a0,transparent); }
+.shift-s3::after { background: linear-gradient(90deg,#f97316,transparent); }
+.shift-s4::after { background: linear-gradient(90deg,#0ea5e9,transparent); }
+.shift-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.shift-time { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+.shift-agents { font-size: 24px; font-weight: 700; }
+.shift-agents-label { font-size: 9px; color: var(--muted); font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.shift-bar { height: 3px; background: rgba(255,255,255,.06); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+.shift-bar-fill { height: 100%; border-radius: 2px; }
+
+/* Footer */
+.footer { margin-top: 60px; padding-top: 20px; border-top: .5px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.footer-text { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+/* Animations */
+.fade-up { opacity: 0; transform: translateY(16px); animation: fadeUp .5s ease forwards; }
+@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+.fade-up:nth-child(1) { animation-delay: .05s; }
+.fade-up:nth-child(2) { animation-delay: .10s; }
+.fade-up:nth-child(3) { animation-delay: .15s; }
+.fade-up:nth-child(4) { animation-delay: .20s; }
+.fade-up:nth-child(5) { animation-delay: .25s; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="header fade-up">
+    <div class="header-top">
+      <div class="brand"><div class="brand-dot"></div><span class="brand-name">Ultrahuman CX</span></div>
+      <span class="date-badge">2026-04-06 to 2026-04-15</span>
+    </div>
+    <h1>Chat Volume<br><span>Heatmap</span></h1>
+    <p class="header-sub">// 40,929 tickets analysed &nbsp;&middot;&nbsp; 30-min slot granularity &nbsp;&middot;&nbsp; 39 agents rostered</p>
+  </header>
+
+  <div class="config-bar fade-up">
+    <div class="config-item">
+      <label>AHT (min)</label>
+      <input type="range" id="aht" min="5" max="45" value="16" step="1">
+      <span class="config-val" id="aht-val">16</span>
+    </div>
+    <div class="config-sep"></div>
+    <div class="config-item">
+      <label>Concurrency</label>
+      <input type="range" id="conc" min="1" max="6" value="3.0" step="0.5">
+      <span class="config-val" id="conc-val">3.0</span>
+    </div>
+    <div class="config-sep"></div>
+    <span class="recalc-note" id="peak-needed-note">Peak agents needed: —</span>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi green fade-up"><div class="kpi-val green">40,929</div><div class="kpi-label">Total Tickets</div></div>
+    <div class="kpi warn fade-up"><div class="kpi-val warn" id="kpi-peak-need">—</div><div class="kpi-label">Peak Agents Needed</div></div>
+    <div class="kpi blue fade-up"><div class="kpi-val blue">20:30</div><div class="kpi-label">Busiest Slot</div></div>
+    <div class="kpi green fade-up"><div class="kpi-val green">115</div><div class="kpi-label">Peak Avg Chats/30min</div></div>
+    <div class="kpi red fade-up"><div class="kpi-val" style="color:var(--muted)">59</div><div class="kpi-label">Trough Avg Chats/30min</div></div>
+  </div>
+
+  <div class="section-head">
+    <span class="section-title">Active Shifts</span>
+    <span class="section-sub">// S1  7AM-4PM(13) &middot; S2  3PM-12AM(10) &middot; S3  6PM-3AM(10) &middot; S4 11PM-8AM(6)</span>
+  </div>
+  <div class="shifts-grid">
+    
+    <div class="shift-card shift-s1">
+      <div class="shift-name">S1  7AM-4PM</div>
+      <div class="shift-time">07:00 &ndash; 16:00</div>
+      <div class="shift-agents">13 <span class="shift-agents-label">agents</span></div>
+      <div class="shift-bar"><div class="shift-bar-fill" style="width:33%;background:#f59e0b"></div></div>
+    </div>
+    <div class="shift-card shift-s2">
+      <div class="shift-name">S2  3PM-12AM</div>
+      <div class="shift-time">15:00 &ndash; 00:00</div>
+      <div class="shift-agents">10 <span class="shift-agents-label">agents</span></div>
+      <div class="shift-bar"><div class="shift-bar-fill" style="width:26%;background:#00e5a0"></div></div>
+    </div>
+    <div class="shift-card shift-s3">
+      <div class="shift-name">S3  6PM-3AM</div>
+      <div class="shift-time">18:00 &ndash; 03:00</div>
+      <div class="shift-agents">10 <span class="shift-agents-label">agents</span></div>
+      <div class="shift-bar"><div class="shift-bar-fill" style="width:26%;background:#f97316"></div></div>
+    </div>
+    <div class="shift-card shift-s4">
+      <div class="shift-name">S4 11PM-8AM</div>
+      <div class="shift-time">23:00 &ndash; 08:00</div>
+      <div class="shift-agents">6 <span class="shift-agents-label">agents</span></div>
+      <div class="shift-bar"><div class="shift-bar-fill" style="width:15%;background:#0ea5e9"></div></div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <span class="section-title">Volume Trends</span>
+    <span class="section-sub">// avg chats per hour &amp; per day</span>
+  </div>
+  <div class="charts-row">
+    <div class="chart-card fade-up">
+      <div class="chart-card-title">Hourly Volume (Daily Avg)</div>
+      <div style="position:relative;height:220px"><canvas id="hourlyChart" role="img" aria-label="Hourly average chat volume bar chart"></canvas></div>
+    </div>
+    <div class="chart-card fade-up">
+      <div class="chart-card-title">Volume by Day of Week</div>
+      <div style="position:relative;height:220px"><canvas id="dayChart" role="img" aria-label="Total chat volume per day of week bar chart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <span class="section-title">30-Min Heatmap</span>
+    <span class="section-sub">// avg chats per slot &nbsp;&middot;&nbsp; hover any cell for details</span>
+  </div>
+  <div class="heatmap-card fade-up">
+    <div class="period-badges" id="period-badges"></div>
+    <div style="margin-top:14px;overflow-x:auto">
+      <table class="heatmap-table" id="heatmap-table"></table>
+    </div>
+    <div class="legend-row">
+      <span class="legend-label">low</span>
+      <div class="legend-grad"></div>
+      <span class="legend-label">peak</span>
+      <span class="legend-label" style="margin-left:16px;color:rgba(245,158,11,.8)">&#9632; = Agents Needed</span>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <span class="footer-text">// Ultrahuman CX Operations &nbsp;&middot;&nbsp; Chat Heatmap</span>
+    <span class="footer-text">Generated automatically from Yellow.ai export</span>
+  </footer>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+
+const MATRIX = [{"slot": "00:00", "days": [102, 124, 114, 75, 104, 85, 92], "avg": 99}, {"slot": "00:30", "days": [80, 114, 121, 93, 99, 70, 92], "avg": 96}, {"slot": "01:00", "days": [88, 102, 112, 69, 80, 56, 87], "avg": 85}, {"slot": "01:30", "days": [82, 110, 80, 91, 92, 55, 87], "avg": 85}, {"slot": "02:00", "days": [78, 92, 92, 84, 84, 66, 60], "avg": 79}, {"slot": "02:30", "days": [62, 88, 98, 99, 80, 50, 70], "avg": 78}, {"slot": "03:00", "days": [72, 100, 102, 70, 59, 46, 55], "avg": 72}, {"slot": "03:30", "days": [74, 94, 90, 93, 80, 52, 67], "avg": 79}, {"slot": "04:00", "days": [68, 80, 63, 74, 65, 54, 37], "avg": 63}, {"slot": "04:30", "days": [74, 77, 62, 57, 57, 46, 68], "avg": 63}, {"slot": "05:00", "days": [62, 71, 78, 43, 50, 29, 78], "avg": 59}, {"slot": "05:30", "days": [64, 80, 78, 65, 74, 37, 50], "avg": 64}, {"slot": "06:00", "days": [65, 86, 71, 62, 64, 35, 70], "avg": 65}, {"slot": "06:30", "days": [74, 67, 72, 114, 76, 41, 74], "avg": 74}, {"slot": "07:00", "days": [80, 68, 71, 80, 75, 50, 45], "avg": 67}, {"slot": "07:30", "days": [70, 76, 69, 82, 90, 60, 56], "avg": 72}, {"slot": "08:00", "days": [76, 86, 82, 73, 91, 53, 67], "avg": 75}, {"slot": "08:30", "days": [78, 76, 70, 92, 56, 47, 66], "avg": 69}, {"slot": "09:00", "days": [70, 70, 67, 87, 83, 40, 58], "avg": 68}, {"slot": "09:30", "days": [60, 84, 80, 79, 77, 50, 57], "avg": 70}, {"slot": "10:00", "days": [76, 79, 70, 83, 54, 51, 58], "avg": 67}, {"slot": "10:30", "days": [56, 99, 66, 56, 52, 47, 52], "avg": 61}, {"slot": "11:00", "days": [65, 63, 75, 83, 75, 49, 63], "avg": 68}, {"slot": "11:30", "days": [75, 72, 80, 74, 75, 61, 55], "avg": 70}, {"slot": "12:00", "days": [62, 65, 72, 58, 61, 52, 47], "avg": 60}, {"slot": "12:30", "days": [67, 61, 82, 98, 77, 63, 53], "avg": 72}, {"slot": "13:00", "days": [62, 64, 81, 84, 52, 47, 69], "avg": 66}, {"slot": "13:30", "days": [74, 70, 63, 68, 63, 89, 52], "avg": 68}, {"slot": "14:00", "days": [66, 74, 86, 81, 70, 50, 59], "avg": 69}, {"slot": "14:30", "days": [63, 84, 74, 62, 79, 50, 69], "avg": 69}, {"slot": "15:00", "days": [96, 112, 74, 85, 109, 44, 54], "avg": 82}, {"slot": "15:30", "days": [91, 102, 93, 104, 106, 67, 79], "avg": 92}, {"slot": "16:00", "days": [108, 96, 90, 89, 107, 79, 83], "avg": 93}, {"slot": "16:30", "days": [97, 132, 102, 78, 81, 94, 55], "avg": 91}, {"slot": "17:00", "days": [102, 107, 100, 113, 97, 80, 77], "avg": 97}, {"slot": "17:30", "days": [106, 102, 108, 128, 103, 75, 101], "avg": 103}, {"slot": "18:00", "days": [108, 120, 109, 135, 103, 110, 82], "avg": 110}, {"slot": "18:30", "days": [128, 118, 107, 117, 103, 97, 84], "avg": 108}, {"slot": "19:00", "days": [104, 115, 91, 116, 102, 116, 92], "avg": 105}, {"slot": "19:30", "days": [126, 136, 124, 125, 112, 92, 63], "avg": 111}, {"slot": "20:00", "days": [133, 118, 98, 121, 96, 111, 58], "avg": 105}, {"slot": "20:30", "days": [108, 124, 110, 136, 126, 126, 74], "avg": 115}, {"slot": "21:00", "days": [124, 129, 102, 77, 93, 89, 74], "avg": 98}, {"slot": "21:30", "days": [103, 108, 114, 98, 95, 72, 86], "avg": 97}, {"slot": "22:00", "days": [142, 141, 106, 90, 100, 67, 83], "avg": 104}, {"slot": "22:30", "days": [110, 112, 110, 89, 92, 68, 132], "avg": 102}, {"slot": "23:00", "days": [132, 110, 110, 110, 90, 115, 113], "avg": 111}, {"slot": "23:30", "days": [136, 108, 110, 113, 98, 99, 98], "avg": 109}];
+const HOURLY = {"0": 195, "1": 170, "2": 157, "3": 151, "4": 126, "5": 123, "6": 139, "7": 139, "8": 144, "9": 138, "10": 128, "11": 138, "12": 132, "13": 134, "14": 138, "15": 174, "16": 184, "17": 200, "18": 218, "19": 216, "20": 220, "21": 195, "22": 206, "23": 220};
+const DAY_TOTALS = {"Mon": 4199, "Tue": 4566, "Wed": 4279, "Thu": 4253, "Fri": 4007, "Sat": 3182, "Sun": 3401};
+const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+let AHT = 16, CONC = 3.0;
+
+
+document.getElementById('aht').addEventListener('input', function(e) {
+  AHT = parseInt(e.target.value);
+  document.getElementById('aht-val').textContent = AHT;
+  updateNeeded();
+});
+document.getElementById('conc').addEventListener('input', function(e) {
+  CONC = parseFloat(e.target.value);
+  document.getElementById('conc-val').textContent = CONC.toFixed(1);
+  updateNeeded();
+});
+
+function calcNeeded(avg) {
+  return Math.round(avg * AHT / 30 / CONC * 10) / 10;
+}
+function updateNeeded() {
+  var peak = Math.max.apply(null, MATRIX.map(function(r) { return calcNeeded(r.avg); }));
+  document.getElementById('kpi-peak-need').textContent = peak.toFixed(1);
+  document.getElementById('peak-needed-note').textContent = 'Peak agents needed: ' + peak.toFixed(1);
+  document.querySelectorAll('.need-cell').forEach(function(td) {
+    td.textContent = calcNeeded(parseInt(td.dataset.avg)).toFixed(1);
+  });
+}
+
+var VMIN = Math.min.apply(null, MATRIX.map(function(r) { return Math.min.apply(null, r.days); }));
+var VMAX = Math.max.apply(null, MATRIX.map(function(r) { return Math.max.apply(null, r.days); }));
+
+function heatColor(val) {
+  var r = Math.max(0, Math.min(1, (val - VMIN) / (VMAX - VMIN)));
+  var ri, gi, bi;
+  if (r < 0.2) {
+    var t = r / 0.2;
+    ri = Math.round(15 + t*20); gi = Math.round(42 + t*35); bi = Math.round(74 + t*130);
+  } else if (r < 0.45) {
+    var t = (r-0.2)/0.25;
+    ri = Math.round(35+t*205); gi = Math.round(77+t*162); bi = Math.round(204+t*51);
+  } else if (r < 0.7) {
+    var t = (r-0.45)/0.25;
+    ri = 255; gi = Math.round(239-t*166); bi = Math.round(255-t*255);
+  } else {
+    var t = (r-0.7)/0.3;
+    ri = Math.round(255-t*128); gi = Math.round(73-t*73); bi = 0;
+  }
+  return 'rgb(' + ri + ',' + gi + ',' + bi + ')';
+}
+function textColor(val) {
+  var r = (val - VMIN) / (VMAX - VMIN);
+  return r > 0.65 ? '#fff' : (r < 0.2 ? '#6b7a8a' : '#e8edf2');
+}
+
+var table = document.getElementById('heatmap-table');
+var periods = [
+  {label:'🌃 Night Peak', slots:['00:00','00:30','01:00','01:30'], color:'#0ea5e9'},
+  {label:'🌙 Late Night', slots:['02:00','02:30','03:00','03:30','04:00','04:30','05:00','05:30'], color:'#8b5cf6'},
+  {label:'🌅 Early AM',   slots:['06:00','06:30'], color:'#f59e0b'},
+  {label:'☀️ Morning',    slots:['07:00','07:30','08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30'], color:'#eab308'},
+  {label:'🌤 Midday',     slots:['12:00','12:30','13:00','13:30','14:00','14:30'], color:'#22c55e'},
+  {label:'🌆 Afternoon',  slots:['15:00','15:30','16:00','16:30','17:00','17:30'], color:'#f97316'},
+  {label:'🌇 Peak Eve',   slots:['18:00','18:30','19:00','19:30','20:00','20:30','21:00','21:30'], color:'#ef4444'},
+  {label:'🌃 Night Surge',slots:['22:00','22:30','23:00','23:30'], color:'#f43f5e'}
+];
+var slotPeriod = {};
+periods.forEach(function(p) { p.slots.forEach(function(s) { slotPeriod[s] = p; }); });
+
+var thead = table.createTHead();
+var hr = thead.insertRow();
+var th0 = document.createElement('th'); th0.className = 'slot-h'; th0.textContent = 'Slot'; hr.appendChild(th0);
+DAYS_SHORT.forEach(function(d) { var th = document.createElement('th'); th.textContent = d; hr.appendChild(th); });
+var thA = document.createElement('th'); thA.textContent = 'Avg'; thA.style.color = '#e8edf2'; hr.appendChild(thA);
+var thN = document.createElement('th'); thN.textContent = 'Need'; thN.style.color = '#f59e0b'; hr.appendChild(thN);
+
+var tbody = table.createTBody();
+var lastPeriod = null;
+MATRIX.forEach(function(row) {
+  var tr = tbody.insertRow();
+  var period = slotPeriod[row.slot];
+  if (period && period !== lastPeriod) { tr.classList.add('period-row'); lastPeriod = period; }
+  var tdSlot = tr.insertCell(); tdSlot.className = 'slot-td'; tdSlot.textContent = row.slot;
+  row.days.forEach(function(val, di) {
+    var td = tr.insertCell();
+    td.style.background = heatColor(val);
+    td.style.color = textColor(val);
+    td.textContent = val;
+    td.dataset.slot = row.slot; td.dataset.day = DAYS_SHORT[di]; td.dataset.val = val;
+    td.addEventListener('mousemove', function(e) { showTooltip(e, row.slot, DAYS_SHORT[di], val); });
+    td.addEventListener('mouseleave', hideTooltip);
+  });
+  var tdAvg = tr.insertCell(); tdAvg.className = 'avg-td';
+  tdAvg.style.background = heatColor(row.avg); tdAvg.style.color = textColor(row.avg); tdAvg.textContent = row.avg;
+  var tdNeed = tr.insertCell(); tdNeed.className = 'need-td need-cell';
+  tdNeed.dataset.avg = row.avg; tdNeed.textContent = calcNeeded(row.avg).toFixed(1);
+});
+updateNeeded();
+
+var tooltip = document.getElementById('tooltip');
+function showTooltip(e, slot, day, val) {
+  var needed = calcNeeded(val);
+  tooltip.innerHTML = '<span style="color:var(--muted)">' + day + ' &middot; ' + slot + '</span><br>'
+    + 'Chats: <strong style="color:var(--text)">' + val + '</strong><br>'
+    + 'Agents needed: <strong style="color:var(--warn)">' + needed.toFixed(1) + '</strong><br>'
+    + '<span style="color:var(--muted);font-size:9px">AHT ' + AHT + 'min &middot; Concurrency ' + CONC.toFixed(1) + '</span>';
+  tooltip.style.display = 'block';
+  tooltip.style.left = (e.clientX + 16) + 'px';
+  tooltip.style.top  = (e.clientY - 10) + 'px';
+}
+function hideTooltip() { tooltip.style.display = 'none'; }
+
+var badgeContainer = document.getElementById('period-badges');
+periods.forEach(function(p) {
+  var b = document.createElement('span'); b.className = 'pbadge';
+  b.textContent = p.label; b.style.color = p.color;
+  b.style.borderColor = p.color + '40'; b.style.background = p.color + '10';
+  badgeContainer.appendChild(b);
+});
+
+var hours = Array.from({length:24}, function(_,i) { return String(i).padStart(2,'0') + ':00'; });
+var hourlyVals = hours.map(function(_,i) { return HOURLY[String(i)] || 0; });
+
+new Chart(document.getElementById('hourlyChart'), {
+  type: 'line',
+  data: {
+    labels: hours,
+    datasets: [{
+      label: 'Avg chats/hr', data: hourlyVals,
+      borderColor: '#00e5a0', backgroundColor: 'rgba(0,229,160,0.06)',
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+      pointHoverBackgroundColor: '#00e5a0', fill: true, tension: 0.4
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color:'#6b7a8a', font:{size:8}, maxRotation:0, autoSkip:true, maxTicksLimit:8 }, grid: { color:'rgba(255,255,255,0.04)' }, border: { color:'rgba(255,255,255,0.08)' } },
+      y: { ticks: { color:'#6b7a8a', font:{size:8} }, grid: { color:'rgba(255,255,255,0.04)' }, border: { color:'rgba(255,255,255,0.08)' } }
+    }
+  }
+});
+
+new Chart(document.getElementById('dayChart'), {
+  type: 'bar',
+  data: {
+    labels: Object.keys(DAY_TOTALS),
+    datasets: [{
+      label: 'Total tickets', data: Object.values(DAY_TOTALS),
+      backgroundColor: ['#00e5a0','#00e5a0','#00e5a0','#0ea5e9','#0ea5e9','#6b7a8a','#6b7a8a'],
+      borderRadius: 4, borderSkipped: false
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color:'#6b7a8a', font:{size:9} }, grid: { display: false }, border: { color:'rgba(255,255,255,0.08)' } },
+      y: { ticks: { color:'#6b7a8a', font:{size:8} }, grid: { color:'rgba(255,255,255,0.04)' }, border: { color:'rgba(255,255,255,0.08)' } }
+    }
+  }
+});
+</script>
+</body>
+</html>
